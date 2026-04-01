@@ -1,0 +1,15 @@
+[
+  {
+    "name": "Test notify",
+    "method": "POST",
+    "path": "/",
+    "body": {
+      "fullName": "Тест",
+      "phone": "+79990000000",
+      "telegram": "@test",
+      "carBrand": "BMW",
+      "carModel": "X5"
+    },
+    "expectedStatus": 200
+  }
+]
