@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Dialog,
@@ -9,7 +9,8 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Check, ChevronRight, ChevronLeft, User, Phone, Send, Car } from 'lucide-react'
+import { Check, ChevronRight, ChevronLeft, User, Phone, Send, Car, ChevronDown } from 'lucide-react'
+import { carBrands, getModelsByBrand } from '@/data/carData'
 
 interface BookingFormProps {
   open: boolean
@@ -21,14 +22,128 @@ interface FormData {
   phone: string
   telegram: string
   carBrand: string
+  carModel: string
 }
 
 const steps = [
   { id: 1, label: 'Имя', icon: User, title: 'Как вас зовут?', description: 'Введите ваше имя и фамилию' },
   { id: 2, label: 'Телефон', icon: Phone, title: 'Ваш номер телефона', description: 'Мы свяжемся с вами для подтверждения' },
   { id: 3, label: 'Telegram', icon: Send, title: 'Ваш Telegram', description: 'Укажите @юзернейм для связи' },
-  { id: 4, label: 'Авто', icon: Car, title: 'Марка автомобиля', description: 'Укажите марку и модель вашего авто' },
+  { id: 4, label: 'Авто', icon: Car, title: 'Ваш автомобиль', description: 'Выберите марку и модель вашего авто' },
 ]
+
+// Autocomplete Combobox Component
+interface ComboboxProps {
+  value: string
+  onChange: (value: string) => void
+  options: string[]
+  placeholder: string
+  disabled?: boolean
+  autoFocus?: boolean
+}
+
+function Combobox({ value, onChange, options, placeholder, disabled, autoFocus }: ComboboxProps) {
+  const [inputValue, setInputValue] = useState(value)
+  const [open, setOpen] = useState(false)
+  const [highlighted, setHighlighted] = useState(0)
+  const inputRef = useRef<HTMLInputElement>(null)
+  const listRef = useRef<HTMLUListElement>(null)
+
+  const filtered = options.filter((opt) =>
+    opt.toLowerCase().includes(inputValue.toLowerCase())
+  )
+
+  useEffect(() => {
+    setInputValue(value)
+  }, [value])
+
+  useEffect(() => {
+    setHighlighted(0)
+  }, [inputValue])
+
+  const select = (opt: string) => {
+    setInputValue(opt)
+    onChange(opt)
+    setOpen(false)
+  }
+
+  const handleInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setInputValue(e.target.value)
+    onChange('')
+    setOpen(true)
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!open || filtered.length === 0) return
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      setHighlighted((h) => Math.min(h + 1, filtered.length - 1))
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      setHighlighted((h) => Math.max(h - 1, 0))
+    } else if (e.key === 'Enter') {
+      e.preventDefault()
+      if (filtered[highlighted]) select(filtered[highlighted])
+    } else if (e.key === 'Escape') {
+      setOpen(false)
+    }
+  }
+
+  useEffect(() => {
+    if (listRef.current && open) {
+      const item = listRef.current.children[highlighted] as HTMLElement
+      item?.scrollIntoView({ block: 'nearest' })
+    }
+  }, [highlighted, open])
+
+  return (
+    <div className="relative">
+      <div className="relative">
+        <Input
+          ref={inputRef}
+          value={inputValue}
+          onChange={handleInput}
+          onFocus={() => setOpen(true)}
+          onBlur={() => setTimeout(() => setOpen(false), 150)}
+          onKeyDown={handleKeyDown}
+          placeholder={placeholder}
+          disabled={disabled}
+          autoFocus={autoFocus}
+          className="bg-[#1a1a1a] border-[#2a2a2a] text-white placeholder:text-gray-600 focus:border-[#FF4D00] focus:ring-[#FF4D00]/20 h-11 pr-9"
+        />
+        <ChevronDown
+          className={`absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
+        />
+      </div>
+      <AnimatePresence>
+        {open && filtered.length > 0 && (
+          <motion.ul
+            ref={listRef}
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            transition={{ duration: 0.15 }}
+            className="absolute z-50 w-full mt-1 bg-[#141414] border border-[#2a2a2a] rounded-lg shadow-xl max-h-48 overflow-y-auto"
+          >
+            {filtered.map((opt, i) => (
+              <li
+                key={opt}
+                onMouseDown={() => select(opt)}
+                className={`px-3 py-2 text-sm cursor-pointer transition-colors duration-100 ${
+                  i === highlighted
+                    ? 'bg-[#FF4D00]/20 text-[#FF4D00]'
+                    : 'text-gray-200 hover:bg-[#1f1f1f]'
+                }`}
+              >
+                {opt}
+              </li>
+            ))}
+          </motion.ul>
+        )}
+      </AnimatePresence>
+    </div>
+  )
+}
 
 export default function BookingForm({ open, onOpenChange }: BookingFormProps) {
   const [step, setStep] = useState(1)
@@ -39,6 +154,7 @@ export default function BookingForm({ open, onOpenChange }: BookingFormProps) {
     phone: '',
     telegram: '',
     carBrand: '',
+    carModel: '',
   })
 
   const currentStep = steps[step - 1]
@@ -64,7 +180,7 @@ export default function BookingForm({ open, onOpenChange }: BookingFormProps) {
     setTimeout(() => {
       setStep(1)
       setSubmitted(false)
-      setFormData({ fullName: '', phone: '', telegram: '', carBrand: '' })
+      setFormData({ fullName: '', phone: '', telegram: '', carBrand: '', carModel: '' })
     }, 300)
   }
 
@@ -78,14 +194,18 @@ export default function BookingForm({ open, onOpenChange }: BookingFormProps) {
     }
   }
 
-  const isCurrentStepValid = () => getCurrentValue().trim().length > 0
+  const isCurrentStepValid = () => {
+    if (step === 4) {
+      return formData.carBrand.trim().length > 0 && formData.carModel.trim().length > 0
+    }
+    return getCurrentValue().trim().length > 0
+  }
 
   const handleChange = (value: string) => {
     switch (step) {
       case 1: setFormData((d) => ({ ...d, fullName: value })); break
       case 2: setFormData((d) => ({ ...d, phone: value })); break
       case 3: setFormData((d) => ({ ...d, telegram: value })); break
-      case 4: setFormData((d) => ({ ...d, carBrand: value })); break
     }
   }
 
@@ -94,7 +214,6 @@ export default function BookingForm({ open, onOpenChange }: BookingFormProps) {
       case 1: return 'Иван Иванов'
       case 2: return '+7 (999) 000-00-00'
       case 3: return '@username'
-      case 4: return 'Toyota Camry'
       default: return ''
     }
   }
@@ -111,6 +230,8 @@ export default function BookingForm({ open, onOpenChange }: BookingFormProps) {
     center: { x: 0, opacity: 1 },
     exit: (dir: number) => ({ x: dir > 0 ? -60 : 60, opacity: 0 }),
   }
+
+  const availableModels = getModelsByBrand(formData.carBrand)
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -169,7 +290,7 @@ export default function BookingForm({ open, onOpenChange }: BookingFormProps) {
         )}
 
         {/* Content */}
-        <div className="px-6 py-4 min-h-[180px] relative overflow-hidden">
+        <div className="px-6 py-4 min-h-[180px] relative overflow-visible">
           <AnimatePresence mode="wait" custom={direction}>
             {submitted ? (
               <motion.div
@@ -193,7 +314,7 @@ export default function BookingForm({ open, onOpenChange }: BookingFormProps) {
                     { label: 'Имя', value: formData.fullName },
                     { label: 'Телефон', value: formData.phone },
                     { label: 'Telegram', value: formData.telegram },
-                    { label: 'Авто', value: formData.carBrand },
+                    { label: 'Авто', value: `${formData.carBrand} ${formData.carModel}` },
                   ].map((item) => (
                     <div key={item.label} className="flex justify-between text-sm">
                       <span className="text-gray-500">{item.label}:</span>
@@ -217,18 +338,48 @@ export default function BookingForm({ open, onOpenChange }: BookingFormProps) {
                   <h3 className="text-lg font-semibold text-white">{currentStep.title}</h3>
                   <p className="text-gray-400 text-sm mt-0.5">{currentStep.description}</p>
                 </div>
-                <div className="space-y-2">
-                  <Label className="text-gray-300 text-sm">{currentStep.label}</Label>
-                  <Input
-                    type={getInputType()}
-                    placeholder={getPlaceholder()}
-                    value={getCurrentValue()}
-                    onChange={(e) => handleChange(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && isCurrentStepValid() && handleNext()}
-                    autoFocus
-                    className="bg-[#1a1a1a] border-[#2a2a2a] text-white placeholder:text-gray-600 focus:border-[#FF4D00] focus:ring-[#FF4D00]/20 h-11"
-                  />
-                </div>
+
+                {step === 4 ? (
+                  <div className="space-y-3">
+                    <div className="space-y-2">
+                      <Label className="text-gray-300 text-sm">Марка</Label>
+                      <Combobox
+                        value={formData.carBrand}
+                        onChange={(val) => {
+                          setFormData((d) => ({ ...d, carBrand: val, carModel: '' }))
+                        }}
+                        options={carBrands}
+                        placeholder="Например: Toyota"
+                        autoFocus
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label className={`text-sm ${formData.carBrand ? 'text-gray-300' : 'text-gray-600'}`}>
+                        Модель
+                      </Label>
+                      <Combobox
+                        value={formData.carModel}
+                        onChange={(val) => setFormData((d) => ({ ...d, carModel: val }))}
+                        options={availableModels.length > 0 ? availableModels : []}
+                        placeholder={formData.carBrand ? 'Выберите модель' : 'Сначала выберите марку'}
+                        disabled={!formData.carBrand}
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <Label className="text-gray-300 text-sm">{currentStep.label}</Label>
+                    <Input
+                      type={getInputType()}
+                      placeholder={getPlaceholder()}
+                      value={getCurrentValue()}
+                      onChange={(e) => handleChange(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && isCurrentStepValid() && handleNext()}
+                      autoFocus
+                      className="bg-[#1a1a1a] border-[#2a2a2a] text-white placeholder:text-gray-600 focus:border-[#FF4D00] focus:ring-[#FF4D00]/20 h-11"
+                    />
+                  </div>
+                )}
               </motion.div>
             )}
           </AnimatePresence>
